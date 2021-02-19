@@ -84,9 +84,9 @@ jobs:
           working_directory: ./frontend
           command: npm run build
       - persist_to_workspace:
-        root: .
-        paths:
-          - frontend/dist
+          root: .
+          paths:
+            - frontend/dist
 
   build-backend:
     executor: node
