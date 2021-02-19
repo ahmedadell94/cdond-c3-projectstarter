@@ -138,7 +138,9 @@ jobs:
       - run:
           name: Check Backend against security vulnerabilities
           working_directory: ./backend
-          command: npm audit --audit-level=critical
+          command: npm audit  --audit-level=critical
+
+  
 
   
 workflows:
@@ -164,4 +166,5 @@ workflows:
       - scan-frontend:
           requires:
             - build-frontend
+
       
