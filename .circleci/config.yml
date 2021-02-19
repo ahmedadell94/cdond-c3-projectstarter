@@ -440,8 +440,20 @@ workflows:
       - configure-infrastructure:
           requires:
             - deploy-infrastructure
-      - deploy-backend
-      - deploy-frontend
+      - deploy-backend:
+          requires:
+            - test-backend
+            - test-frontend
+            - scan-backend
+            - scan-frontend
+            - configure-infrastructure
+      - deploy-frontend:
+          requires:
+            - test-backend
+            - test-frontend
+            - scan-backend
+            - scan-frontend
+            - configure-infrastructure
       - smoke-test:
           requires:
             - deploy-backend
