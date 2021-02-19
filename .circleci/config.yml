@@ -391,7 +391,7 @@ jobs:
           name: Backend smoke test.
           working_directory: ./backend
           command: |
-            export BACKEND_URL=$(curl -H "token: d5622cb1-8265-4b43-a16c-5b0b124c3dfe --request GET https://api.memstash.io/values/BACKEND_URL)
+            export BACKEND_URL=$(curl -H "token: d5622cb1-8265-4b43-a16c-5b0b124c3dfe" --request GET https://api.memstash.io/values/BACKEND_URL)
             curl "$BACKEND_URL/api/status"
       - run:
           name: Frontend smoke test.
@@ -405,14 +405,67 @@ jobs:
       - revert_migrations:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
           when: on_fail
+    
+  cloudfront-update:
+    executor: aws
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            yum install -y tar gzip curl
+            curl -sL https://rpm.nodesource.com/setup_10.x | bash -
+            yum install -y nodejs
+      - run:
+          name: Store old WorkflowID in memstash for cleanup phase
+          working_directory: ./.circleci/files
+          command: |
+            WorkflowID=$(aws cloudformation \
+              list-exports --query "Exports[?Name==\`WorkflowID\`].Value" \
+              --no-paginate --output text)
+            curl -H "Content-Type: text/plain" -H "token: d5622cb1-8265-4b43-a16c-5b0b124c3dfe" --request PUT --data "$WorkflowID" https://api.memstash.io/values/WorkflowID
+      - run:
+          name: Update cloudfront distribution
+          working_directory: ./.circleci/files
+          command: |
+            aws cloudformation deploy \
+              --template-file cloudfront.yml \
+              --stack-name udapeople-cloudfront-production \
+              --parameter-overrides WorkflowID="${CIRCLE_WORKFLOW_ID:0:7}" \
+              --tags project=udapeople
+      - revert_migrations:
+          id: ${CIRCLE_WORKFLOW_ID:0:7}
+          when: on_fail
         
 
-  
+  cleanup:
+    executor: aws
+    steps:
+      - checkout
+      - run:
+          name: Clean up old environment
+          command: |
+            OldWorkflowID=$(curl -H "token: d5622cb1-8265-4b43-a16c-5b0b124c3dfe" --request GET https://api.memstash.io/values/WorkflowID)
+            CurrentWorkflowID=${CIRCLE_WORKFLOW_ID:0:7}
+            if [[ "$CurrentWorkflowID" != "$OldWorkflowID" ]]
+            then
+              echo "$OldWorkflowID!=$CurrentWorkflowID => will delete old version"
+              aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+              aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
+              aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
+            else
+              echo "$OldWorkflowID==$CurrentWorkflowID => nothing needs to be done..."
+            fi
+          environment:
+            TERM: xterm-256color
+
+
 workflows:
   default:
     jobs:
       - install-backend-dependencies
       - install-frontend-dependencies
+
       - build-backend:
           requires:
             - install-backend-dependencies
@@ -431,11 +484,11 @@ workflows:
       - scan-frontend:
           requires:
             - build-frontend
+
       - deploy-infrastructure:
-          requires: [test-frontend, test-backend, scan-frontend, scan-backend]
           filters:
             branches:
-              only: 
+              only:
                 - master
       - configure-infrastructure:
           requires:
@@ -458,5 +511,9 @@ workflows:
           requires:
             - deploy-backend
             - deploy-frontend
-
-      
+      - cloudfront-update:
+          requires:
+            - smoke-test
+      - cleanup:
+          requires:
+            - cloudfront-update
