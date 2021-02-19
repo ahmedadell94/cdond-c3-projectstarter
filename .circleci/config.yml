@@ -1,4 +1,17 @@
+
+  
 version: 2.1
+
+executors:
+  node:
+    docker:
+      - image: circleci/node:13.8.0
+  python:
+    docker:
+      - image: python:3.9.0-alpine
+  aws:
+    docker:
+      - image: amazon/aws-cli
 
 commands:
   destroy-environment:
@@ -12,7 +25,6 @@ commands:
           command: |
             # Your code here
             exit 1
-
   revert-migrations:
     description: Revert the last migration if successfully run in the current workflow.
     parameters:
@@ -33,37 +45,63 @@ commands:
             fi
             
 jobs:
-  build-frontend:
-    docker:
-      - image: circleci/node:13.8.0
+
+  install-backend-dependencies:
+    executor: node
     steps:
       - checkout
-      - restore_cache:
-          keys: [frontend-build]
+      - run:
+          name: npm install
+          working_directory: ./backend
+          command: ls -la && npm install
+      - persist_to_workspace:
+          root: .
+          paths:
+            - backend/node_modules
+
+
+  install-frontend-dependencies:
+    executor: node
+    steps:
+      - checkout
+      - run:
+          name: npm install
+          working_directory: ./frontend
+          command: ls -la && npm install
+      - persist_to_workspace:
+          root: .
+          paths:
+            - frontend/node_modules
+
+  build-frontend:
+    executor: node
+    steps:
+      - checkout
+      - attach_workspace:
+         at: .
       - run:
           name: Build front-end
-          command: |
-            # Your code here
-            exit 1
-      - save_cache:
-          paths: [frontend/node_modules]
-          key: frontend-build
+          working_directory: ./frontend
+          command: npm run build
+      - persist_to_workspace:
+        root: .
+        paths:
+          - frontend/dist
 
   build-backend:
-    docker:
-      - image: circleci/node:13.8.0
+    executor: node
     steps:
       - checkout
-      - restore_cache:
-          keys: [backend-build]
+      - attach_workspace:
+           at: .
       - run:
           name: Back-end build
-          command: |
-             # Your code here
-             exit 1
-      - save_cache:
-          paths: [backend/node_modules]
-          key: backend-build
+          working_directory: ./backend
+          command: npm run build
+      - persist_to_workspace:
+          root: .
+          paths:
+            - backend/dist
 
   test-frontend:
     docker:
@@ -262,12 +300,17 @@ cleanup:
               # your code here
             fi
             
-
 workflows:
   default:
     jobs:
-      - build-frontend
-      - build-backend
+      - install-backend-dependencies
+      - install-frontend-dependencies
+      - build-backend:
+          requires:
+            - install-backend-dependencies
+      - build-frontend:
+          requires:
+            - install-frontend-dependencies
       - test-frontend:
           requires: [build-frontend]
       - test-backend:
@@ -295,3 +338,4 @@ workflows:
           requires: [smoke-test]
       - cleanup:
           requires: [cloudfront-update]
+
