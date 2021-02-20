@@ -1,3 +1,5 @@
+
+  
 version: 2.1
 orbs:
   slack: circleci/slack@4.3.0
@@ -392,12 +394,6 @@ jobs:
           command: |
             export BACKEND_URL=$(curl -H "token: d5622cb1-8265-4b43-a16c-5b0b124c3dfe" --request GET https://api.memstash.io/values/BACKEND_URL)
             curl "$BACKEND_URL/api/status"
-      - run:
-          name: Frontend smoke test.
-          working_directory: ./backend
-          command: |
-            URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website.eu-central-1.amazonaws.com/index.html"
-            curl -s ${URL} | grep -q "Welcome"
       - destroy_environment:
           id: ${CIRCLE_WORKFLOW_ID:0:7}
           when: on_fail
